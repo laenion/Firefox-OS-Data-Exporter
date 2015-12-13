@@ -3,7 +3,6 @@
 from json import loads
 from time import strftime, gmtime
 from datetime import datetime, time
-from ast import literal_eval
 
 json_file = open("events.txt")
 ics_file = open("import.ics", "w")
