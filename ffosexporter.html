@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>Firefox OS Data Exporter</title>
+<script type="text/javascript">
+<!-- Default header lines recommended by Mozilla -->
+//prefixes of implementation that we want to test
+window.indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
+ 
+//prefixes of window.IDB objects
+window.IDBTransaction = window.IDBTransaction || window.webkitIDBTransaction || window.msIDBTransaction;
+window.IDBKeyRange = window.IDBKeyRange || window.webkitIDBKeyRange || window.msIDBKeyRange
+ 
+if (!window.indexedDB) {
+    window.alert("Your browser doesn't support a stable version of IndexedDB.")
+}
+
+
+function processObjectStore(event, num) {
+	if (num < 0) {
+		document.getElementById("progress").textContent = "Done";
+		return "";
+	}
+
+	var objectStoreName = event.target.result.objectStoreNames.item(num);
+	var objectStore = db.transaction(objectStoreName).objectStore(objectStoreName);
+	var output = "";
+
+	objectStore.openCursor().onsuccess = function(event2) {
+		console.log(objectStoreName);
+		var cursor = event2.target.result;
+		if (cursor) {
+			output += cursor.key + ": " + JSON.stringify(cursor.value) + "\n";
+			cursor.continue();
+		} else {
+			var form = document.getElementsByTagName('form')[0];
+			var textfield = document.createElement('textarea');
+			var p = document.createElement('p');
+			var heading = document.createElement('b');
+			textfield.setAttribute('rows', 10);
+			textfield.setAttribute('style', "width:100%;");
+			textfield.value = output;
+			heading.textContent = objectStoreName;
+			p.appendChild(heading);
+			form.appendChild(p);
+			form.appendChild(textfield);
+			processObjectStore(event, num - 1);
+		}
+	}
+}
+
+function exportDatabase() {
+	databaseName = document.getElementById("database").value;
+
+	var request = window.indexedDB.open(databaseName, 99999999);
+
+	request.onerror = function(event) {
+		console.log("error: ");
+		document.getElementById("output").textContent = "An error occured - see console log for details.";
+	};
+ 
+	request.onsuccess = function(event) {
+		db = request.result;
+		console.log("success: " + db);
+
+		document.getElementById("progress").textContent = "Processing...";
+		processObjectStore(event, event.target.result.objectStoreNames.length - 1);
+	};
+}
+</script>
+</head>
+ 
+<body>
+Database name: <input type="text" id="database" value="b2g-calendar"/><br />
+<button onclick="exportDatabase()">Export</button><br />
+<pre id="progress"></pre>
+<form />
+</body>
+</html>
