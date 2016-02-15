@@ -1,79 +1,101 @@
 <!DOCTYPE html>
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<title>Firefox OS Data Exporter</title>
-<script type="text/javascript">
-<!-- Default header lines recommended by Mozilla -->
-//prefixes of implementation that we want to test
-window.indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
- 
-//prefixes of window.IDB objects
-window.IDBTransaction = window.IDBTransaction || window.webkitIDBTransaction || window.msIDBTransaction;
-window.IDBKeyRange = window.IDBKeyRange || window.webkitIDBKeyRange || window.msIDBKeyRange
- 
-if (!window.indexedDB) {
-    window.alert("Your browser doesn't support a stable version of IndexedDB.")
-}
-
-
-function processObjectStore(event, num) {
-	if (num < 0) {
-		document.getElementById("progress").textContent = "Done";
-		return "";
-	}
-
-	var objectStoreName = event.target.result.objectStoreNames.item(num);
-	var objectStore = db.transaction(objectStoreName).objectStore(objectStoreName);
-	var output = "";
-
-	objectStore.openCursor().onsuccess = function(event2) {
-		console.log(objectStoreName);
-		var cursor = event2.target.result;
-		if (cursor) {
-			output += cursor.key + ": " + JSON.stringify(cursor.value) + "\n";
-			cursor.continue();
-		} else {
-			var form = document.getElementsByTagName('form')[0];
-			var textfield = document.createElement('textarea');
-			var p = document.createElement('p');
-			var heading = document.createElement('b');
-			textfield.setAttribute('rows', 10);
-			textfield.setAttribute('style', "width:100%;");
-			textfield.value = output;
-			heading.textContent = objectStoreName;
-			p.appendChild(heading);
-			form.appendChild(p);
-			form.appendChild(textfield);
-			processObjectStore(event, num - 1);
-		}
-	}
-}
-
-function exportDatabase() {
-	databaseName = document.getElementById("database").value;
-
-	var request = window.indexedDB.open(databaseName, 99999999);
-
-	request.onerror = function(event) {
-		console.log("error: ");
-		document.getElementById("output").textContent = "An error occured - see console log for details.";
-	};
- 
-	request.onsuccess = function(event) {
-		db = request.result;
-		console.log("success: " + db);
-
-		document.getElementById("progress").textContent = "Processing...";
-		processObjectStore(event, event.target.result.objectStoreNames.length - 1);
-	};
-}
-</script>
-</head>
- 
-<body>
-Database name: <input type="text" id="database" value="b2g-calendar"/><br />
-<button onclick="exportDatabase()">Export</button><br />
-<pre id="progress"></pre>
-<form />
-</body>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		<title>Firefox OS Data Exporter</title>
+		<style type="text/css">
+			div.tab, div.tab:target ~ #introduction { display: none }
+			div.tab:target, #introduction { display: block }
+			.menu { background: linear-gradient(to bottom, #FF9500 0%, #E66000 100%); padding: 0.4em 1em; border-radius: 1em; }
+			.menu a { background: #0095DD; padding: 0.2em 0.6em; border-radius: 0.2em; }
+		</style>
+		<script type="text/javascript">
+			<!-- Default header lines recommended by Mozilla -->
+			//prefixes of implementation that we want to test
+			window.indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
+	 
+			//prefixes of window.IDB objects
+			window.IDBTransaction = window.IDBTransaction || window.webkitIDBTransaction || window.msIDBTransaction;
+			window.IDBKeyRange = window.IDBKeyRange || window.webkitIDBKeyRange || window.msIDBKeyRange
+	 
+			if (!window.indexedDB) {
+				window.alert("Your browser doesn't support a stable version of IndexedDB.")
+			}
+	
+			function processObjectStore(event, num) {
+				if (num < 0) {
+					document.getElementById("progress").textContent = "Done";
+					return "";
+				}
+	
+				var objectStoreName = event.target.result.objectStoreNames.item(num);
+				var objectStore = db.transaction(objectStoreName).objectStore(objectStoreName);
+				var output = "";
+	
+				objectStore.openCursor().onsuccess = function(event2) {
+					console.log(objectStoreName);
+					var cursor = event2.target.result;
+					if (cursor) {
+						output += JSON.stringify(cursor.value) + ",\n";
+						cursor.continue();
+					} else {
+						var form = document.getElementsByTagName('form')[0];
+						var textfield = document.createElement('textarea');
+						var p = document.createElement('p');
+						var heading = document.createElement('b');
+						textfield.setAttribute('rows', 10);
+						textfield.setAttribute('style', "width:100%;");
+						textfield.value = output;
+						heading.textContent = objectStoreName;
+						p.appendChild(heading);
+						form.appendChild(p);
+						form.appendChild(textfield);
+						processObjectStore(event, num - 1);
+					}
+				}
+			}
+	
+			function exportDatabase() {
+				databaseName = document.getElementById("database").value;
+	
+				var request = window.indexedDB.open(databaseName, 99999999);
+	
+				request.onerror = function(event) {
+					console.log("error: ");
+					document.getElementById("output").textContent = "An error occured - see console log for details.";
+				};
+	 
+				request.onsuccess = function(event) {
+					db = request.result;
+					console.log("success: " + db);
+	
+					document.getElementById("progress").textContent = "Processing...";
+					processObjectStore(event, event.target.result.objectStoreNames.length - 1);
+				};
+			}
+		</script>
+	</head>
+	 
+	<body>
+		<h1>Firefox OS data exporter</h1>
+		<div class="menu"><a href="#introduction">Introduction</a> <a href="#database">Show database</a></div>
+		<div class="tab" id="database">
+			<h2>Database</h2>
+			Database name: <input type="text" id="database" value="b2g-calendar"/><br />
+			<button onclick="exportDatabase()">Export</button><br />
+			<pre id="progress"></pre>
+			<form />
+		</div>
+		<div class="tab" id="introduction">
+			<h2>Introduction</h2>
+			<p>This website will create JSON output out of your Firefox OS device's data (or any other IndexedDB databases for that matter). The JSON output can then be used to export your data into any other format. The following conversions are available out of the box:
+			<ul>
+				<li>Create standard ICS files from Firefox OS calendar data</li>
+				<li>Create JSON files processable by <i>commhistory-tool</i> (e.g. for the <a href="http://jolla.com">Jolla</a> phone) of Firefox OS SMS data</li>
+			</ul>
+			If you need to export any other data into any other format you can at least get the data out of it, but you will have to write your own converter.</p>
+	
+			<p>Note: All data is processed locally on your PC, no data is sent to my server. The source code is available from <a href="https://github.com/laenion/Firefox-OS-Data-Exporter">https://github.com/laenion/Firefox-OS-Data-Exporter</a>.</p>
+		</div>
+	</body>
 </html>
