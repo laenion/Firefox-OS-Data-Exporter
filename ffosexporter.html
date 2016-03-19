@@ -7,7 +7,7 @@
 			div.tab, div.tab:target ~ #introduction { display: none }
 			div.tab:target, #introduction { display: block }
 			.menu { background: linear-gradient(to bottom, #FF9500 0%, #E66000 100%); padding: 0.4em 1em; border-radius: 1em; }
-			.menu a { background: #0095DD; padding: 0.2em 0.6em; border-radius: 0.2em; }
+			.menu a { background: linear-gradient(to bottom, #D4DDE4 0%, #EAEFF2 100%); padding: 0.2em 0.6em; border-radius: 0.2em; }
 		</style>
 		<script type="text/javascript">
 			<!-- Default header lines recommended by Mozilla -->
@@ -33,30 +33,40 @@
 				var output = "";
 	
 				objectStore.openCursor().onsuccess = function(event2) {
-					console.log(objectStoreName);
 					var cursor = event2.target.result;
 					if (cursor) {
 						output += JSON.stringify(cursor.value) + ",\n";
 						cursor.continue();
 					} else {
-						var form = document.getElementsByTagName('form')[0];
+						var form = document.getElementById('objectstores');
 						var textfield = document.createElement('textarea');
 						var p = document.createElement('p');
 						var heading = document.createElement('b');
+						var button = document.createElement('button');
+						button.setAttribute('type', 'button');
+						button.setAttribute('onclick', 'makeResult("calendar2ics", "' + objectStoreName + '");');
+						button.innerHTML = 'Convert Calendar data to ICS file';
 						textfield.setAttribute('rows', 10);
-						textfield.setAttribute('style', "width:100%;");
+						textfield.setAttribute('style', 'width:100%;');
+						textfield.setAttribute('id', objectStoreName);
 						textfield.value = output;
 						heading.textContent = objectStoreName;
 						p.appendChild(heading);
 						form.appendChild(p);
 						form.appendChild(textfield);
+						form.appendChild(button);
+
 						processObjectStore(event, num - 1);
 					}
 				}
 			}
 	
 			function exportDatabase() {
-				databaseName = document.getElementById("database").value;
+				var form = document.getElementById('objectstores');
+				while (form.firstChild)
+					form.removeChild(form.firstChild);
+
+				databaseName = document.getElementById("db").value;
 	
 				var request = window.indexedDB.open(databaseName, 99999999);
 	
@@ -73,18 +83,96 @@
 					processObjectStore(event, event.target.result.objectStoreNames.length - 1);
 				};
 			}
+
+			function escape(s) {
+				var s = s.replace(/\\/g, "\\\\");
+				s = s.replace(/;/g, "\\;");
+				s = s.replace(/,/g, "\\,");
+				s = s.replace(/\n/g, "\\n");
+				return s;
+			}
+
+			function makeResult(type, fieldname) {
+				var extension;
+
+				var jsonContent = JSON.parse('[' + document.getElementById(fieldname).value.substring(0, document.getElementById(fieldname).value.length - 2) + ']');
+
+				var result = "BEGIN:VCALENDAR\n";
+				result += "PRODID:-//digitalimagecorp.de//Firefox OS calendar converter//EN\n";
+				result += "VERSION:2.0\n";
+				for (var line in jsonContent) {
+					// Skip all non-local entries - they have been synced from somewhere and need no backup
+					if (jsonContent[line]["calendarId"] != "local-first")
+						continue;
+					result += "BEGIN:VEVENT\n";
+					result += "DTSTAMP:" + new Date().toLocaleFormat("%Y%m%dT%H%M%SZ") + "\n";
+					result += "UID:" + jsonContent[line]["remote"]["id"] + "\n";
+					result += "SUMMARY:" + escape(jsonContent[line]["remote"]["title"]) + "\n";
+					if (jsonContent[line]["remote"]["location"])
+						result += "LOCATION:" + escape(jsonContent[line]["remote"]["location"]) + "\n";
+					if (jsonContent[line]["remote"]["description"])
+						result += "DESCRIPTION:" + escape(jsonContent[line]["remote"]["description"]) + "\n";
+
+					// Despite it's name the timestamp is *not* UTC, so the offset has to be added / substracted
+					var start = new Date(jsonContent[line]["remote"]["start"]["utc"] - jsonContent[line]["remote"]["start"]["offset"]);
+					var end = new Date(jsonContent[line]["remote"]["end"]["utc"] - jsonContent[line]["remote"]["start"]["offset"]);
+					// All day events can be either saved with the corresponding attribute "isDate"(FFOS 1.1) or just span the whole day (FFOS 1.3)
+					if (jsonContent[line]["remote"]["start"]["isDate"] || ((start.toLocaleFormat("%H%M%S") == 0) && (end.toLocaleFormat("%H%M%S") == 0))) {
+						result += "DTSTART;VALUE=DATE:" + start.toLocaleFormat("%Y%m%d") + "\n";
+						result += "DTEND;VALUE=DATE:" + end.toLocaleFormat("%Y%m%d") + "\n";
+					} else {
+						//result += "DTSTART:" + start.toLocaleFormat("%Y%m%dT%H%M%S") + "\n";
+						result += "DTSTART:" + ("000" + start.getFullYear()).slice(-4) + ("0" + (start.getMonth() + 1)).slice(-2) + ("0" + start.getDate()).slice(-2) + "T" + ("0" + start.getHours()).slice(-2) + ("0" + start.getMinutes()).slice(-2) + ("0" + start.getSeconds()).slice(-2) + "\n";
+						result += "DTEND:" + end.toLocaleFormat("%Y%m%dT%H%M%S") + "\n";
+					}
+
+					result += "TRANSP:OPAQUE\n";
+					for (var alarm in jsonContent[line]["remote"]["alarms"]) {
+						result += "BEGIN:VALARM\n";
+						result += "DESCRIPTION:\n";
+						result += "ACTION:DISPLAY\n";
+						if (jsonContent[line]["remote"]["alarms"][alarm]["trigger"] < 0)
+							jsonContent[line]["remote"]["alarms"][alarm]["trigger"] = "-PT" + -jsonContent[line]["remote"]["alarms"][alarm]["trigger"] + "S";
+						else
+							jsonContent[line]["remote"]["alarms"][alarm]["trigger"] = "PT" + jsonContent[line]["remote"]["alarms"][alarm]["trigger"] + "S";
+						result += "TRIGGER;VALUE=DURATION:" + jsonContent[line]["remote"]["alarms"][alarm]["trigger"] + "\n";
+						result += "END:VALARM\n";
+					}
+					result += "END:VEVENT\n";
+				}
+				result += "END:VCALENDAR\n";
+				extension = ".ics";
+				document.getElementById("processfield").value = result;
+				location.href = "#process";
+
+				document.getElementById("hiddenSaveLink").download = fieldname + extension;
+			}
+
+			function save() {
+				var blob = new Blob([document.getElementById("processfield").value], {type:'text/calendar'});
+				document.getElementById("hiddenSaveLink").href = window.URL.createObjectURL(blob);
+				document.getElementById("hiddenSaveLink").click();
+			}
 		</script>
 	</head>
 	 
 	<body>
 		<h1>Firefox OS data exporter</h1>
-		<div class="menu"><a href="#introduction">Introduction</a> <a href="#database">Show database</a></div>
+		<div class="menu"><a href="#introduction">Introduction</a> <a href="#database">Show database</a> <a href="#process">Process data</a></div>
+		<div class="tab" id="process">
+			<h2>Process data</h2>
+			<p>
+				<textarea id="processfield" rows=30 style="width:100%;" ></textarea>
+				<a id="hiddenSaveLink" style="display:none;">Download</a>
+				<button onclick="save()">Save</button>
+			</p>
+		</div>
 		<div class="tab" id="database">
 			<h2>Database</h2>
-			Database name: <input type="text" id="database" value="b2g-calendar"/><br />
+			Database name: <input type="text" id="db" value="b2g-calendar"/><br />
 			<button onclick="exportDatabase()">Export</button><br />
 			<pre id="progress"></pre>
-			<form />
+			<form id="objectstores"></form>
 		</div>
 		<div class="tab" id="introduction">
 			<h2>Introduction</h2>
