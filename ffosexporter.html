@@ -13,25 +13,25 @@
 			<!-- Default header lines recommended by Mozilla -->
 			//prefixes of implementation that we want to test
 			window.indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
-	 
+
 			//prefixes of window.IDB objects
 			window.IDBTransaction = window.IDBTransaction || window.webkitIDBTransaction || window.msIDBTransaction;
 			window.IDBKeyRange = window.IDBKeyRange || window.webkitIDBKeyRange || window.msIDBKeyRange
-	 
+
 			if (!window.indexedDB) {
 				window.alert("Your browser doesn't support a stable version of IndexedDB.")
 			}
-	
+
 			function processObjectStore(event, num) {
 				if (num < 0) {
 					document.getElementById("progress").textContent = "Done";
 					return "";
 				}
-	
+
 				var objectStoreName = event.target.result.objectStoreNames.item(num);
 				var objectStore = db.transaction(objectStoreName).objectStore(objectStoreName);
 				var output = "";
-	
+
 				objectStore.openCursor().onsuccess = function(event2) {
 					var cursor = event2.target.result;
 					if (cursor) {
@@ -66,31 +66,31 @@
 					}
 				}
 			}
-	
+
 			function exportDatabase() {
-				var form = document.getElementById('objectstores');
+				var form = document.getElementById("objectstores");
 				while (form.firstChild)
 					form.removeChild(form.firstChild);
 
 				databaseName = document.getElementById("db").value;
-	
+
 				var request = window.indexedDB.open(databaseName, 99999999);
-	
+
 				request.onerror = function(event) {
 					console.log("error: ");
 					document.getElementById("output").textContent = "An error occured - see console log for details.";
 				};
-	 
+
 				request.onsuccess = function(event) {
 					db = request.result;
 					console.log("success: " + db);
-	
+
 					document.getElementById("progress").textContent = "Processing...";
 					processObjectStore(event, event.target.result.objectStoreNames.length - 1);
 				};
 			}
 
-			function escape(s) {
+			function escapeIcs(s) {
 				var s = s.replace(/\\/g, "\\\\");
 				s = s.replace(/;/g, "\\;");
 				s = s.replace(/,/g, "\\,");
@@ -105,96 +105,112 @@
 				return s;
 			}
 
-			function makeICSResult(jsonContent) {
-				var foundEntries = 0;
-				var result = "BEGIN:VCALENDAR\n";
+			function transform2ICS(jsonContent) {
+				var numEntries = 0;
+				var result = "";
+
+				result += "BEGIN:VCALENDAR\n";
 				result += "PRODID:-//digitalimagecorp.de//Firefox OS calendar converter//EN\n";
 				result += "VERSION:2.0\n";
 				for (var line in jsonContent) {
-					// Skip all non-local entries - they have been synced from somewhere and need no backup
-					if (jsonContent[line]["calendarId"] != "local-first")
-						continue;
-					foundEntries++;
-					result += "BEGIN:VEVENT\n";
-					result += "DTSTAMP:" + new Date().toLocaleFormat("%Y%m%dT%H%M%SZ") + "\n";
-					result += "UID:" + jsonContent[line]["remote"]["id"] + "\n";
-					result += "SUMMARY:" + escape(jsonContent[line]["remote"]["title"]) + "\n";
-					if (jsonContent[line]["remote"]["location"])
-						result += "LOCATION:" + escape(jsonContent[line]["remote"]["location"]) + "\n";
-					if (jsonContent[line]["remote"]["description"])
-						result += "DESCRIPTION:" + escape(jsonContent[line]["remote"]["description"]) + "\n";
+					try {
+						// Skip all non-local entries - they have been synced from somewhere and need no backup
+						if (jsonContent[line]["calendarId"] != "local-first")
+							continue;
+						numEntries++;
 
-					// Despite it's name the timestamp is *not* UTC, so the offset has to be added / substracted
-					var start = new Date(jsonContent[line]["remote"]["start"]["utc"] - jsonContent[line]["remote"]["start"]["offset"]);
-					var end = new Date(jsonContent[line]["remote"]["end"]["utc"] - jsonContent[line]["remote"]["start"]["offset"]);
-					// "All day" events will either be saved with the corresponding attribute "isDate" (FFOS 1.1) or just span the whole day (FFOS 1.3)
-					if (jsonContent[line]["remote"]["start"]["isDate"] || ((start.toLocaleFormat("%H%M%S") == 0) && (end.toLocaleFormat("%H%M%S") == 0))) {
-						result += "DTSTART;VALUE=DATE:" + start.toLocaleFormat("%Y%m%d") + "\n";
-						result += "DTEND;VALUE=DATE:" + end.toLocaleFormat("%Y%m%d") + "\n";
-					} else {
-						result += "DTSTART:" + start.toLocaleFormat("%Y%m%dT%H%M%S") + "\n";
-						result += "DTEND:" + end.toLocaleFormat("%Y%m%dT%H%M%S") + "\n";
-					}
+						result += "BEGIN:VEVENT\n";
+						result += "DTSTAMP:" + new Date().toLocaleFormat("%Y%m%dT%H%M%SZ") + "\n";
+						result += "UID:" + jsonContent[line]["remote"]["id"] + "\n";
+						result += "SUMMARY:" + escapeIcs(jsonContent[line]["remote"]["title"]) + "\n";
+						if (jsonContent[line]["remote"]["location"])
+							result += "LOCATION:" + escapeIcs(jsonContent[line]["remote"]["location"]) + "\n";
+						if (jsonContent[line]["remote"]["description"])
+							result += "DESCRIPTION:" + escapeIcs(jsonContent[line]["remote"]["description"]) + "\n";
 
-					result += "TRANSP:OPAQUE\n";
-					for (var alarm in jsonContent[line]["remote"]["alarms"]) {
-						result += "BEGIN:VALARM\n";
-						result += "DESCRIPTION:\n";
-						result += "ACTION:DISPLAY\n";
-						if (jsonContent[line]["remote"]["alarms"][alarm]["trigger"] < 0)
-							jsonContent[line]["remote"]["alarms"][alarm]["trigger"] = "-PT" + -jsonContent[line]["remote"]["alarms"][alarm]["trigger"] + "S";
-						else
-							jsonContent[line]["remote"]["alarms"][alarm]["trigger"] = "PT" + jsonContent[line]["remote"]["alarms"][alarm]["trigger"] + "S";
-						result += "TRIGGER;VALUE=DURATION:" + jsonContent[line]["remote"]["alarms"][alarm]["trigger"] + "\n";
-						result += "END:VALARM\n";
+						// Despite it's name the timestamp is *not* UTC, so the offset has to be added / substracted
+						var start = new Date(jsonContent[line]["remote"]["start"]["utc"] - jsonContent[line]["remote"]["start"]["offset"]);
+						var end = new Date(jsonContent[line]["remote"]["end"]["utc"] - jsonContent[line]["remote"]["start"]["offset"]);
+						// "All day" events will either be saved with the corresponding attribute "isDate" (FFOS 1.1) or just span the whole day (FFOS 1.3)
+						if (jsonContent[line]["remote"]["start"]["isDate"] || ((start.toLocaleFormat("%H%M%S") == 0) && (end.toLocaleFormat("%H%M%S") == 0))) {
+							result += "DTSTART;VALUE=DATE:" + start.toLocaleFormat("%Y%m%d") + "\n";
+							result += "DTEND;VALUE=DATE:" + end.toLocaleFormat("%Y%m%d") + "\n";
+						} else {
+							result += "DTSTART:" + start.toLocaleFormat("%Y%m%dT%H%M%S") + "\n";
+							result += "DTEND:" + end.toLocaleFormat("%Y%m%dT%H%M%S") + "\n";
+						}
+
+						result += "TRANSP:OPAQUE\n";
+						for (var alarm in jsonContent[line]["remote"]["alarms"]) {
+							result += "BEGIN:VALARM\n";
+							result += "DESCRIPTION:\n";
+							result += "ACTION:DISPLAY\n";
+							if (jsonContent[line]["remote"]["alarms"][alarm]["trigger"] < 0)
+								jsonContent[line]["remote"]["alarms"][alarm]["trigger"] = "-PT" + -jsonContent[line]["remote"]["alarms"][alarm]["trigger"] + "S";
+							else
+								jsonContent[line]["remote"]["alarms"][alarm]["trigger"] = "PT" + jsonContent[line]["remote"]["alarms"][alarm]["trigger"] + "S";
+							result += "TRIGGER;VALUE=DURATION:" + jsonContent[line]["remote"]["alarms"][alarm]["trigger"] + "\n";
+							result += "END:VALARM\n";
+						}
+						result += "END:VEVENT\n";
+					} catch(e) {
+						return "Error transforming line " + numentries + ":\n\t" + JSON.stringify(jsonContent[line]) +
+							"\n\nEither this wasn't the object store containing calendar data or you have found a bug.\n" +
+							"If you think you got the correct field please report a bug on\nhttps://github.com/laenion/Firefox-OS-Data-Exporter/issues.";
 					}
-					result += "END:VEVENT\n";
 				}
 				result += "END:VCALENDAR\n";
 
-				if (foundEntries)
+				if (numEntries)
 					return result;
 				else
 					return "Could not find any entries - probably this wasn't the object store containing the calendar data...";
 			}
 
-			function makeCommhistoryResult(jsonContent) {
-				var foundEntries = 0;
+			function transform2commhistory(jsonContent) {
 				var isFirst = true;
-				var result = "[\n";
+				var result = "";
 
+				result += "[\n";
 				for (var line in jsonContent) {
-					var direction = "";
+					try {
+						var direction = "";
 
-					if (jsonContent[line]["type"] == "mms")
-						continue;
+						// commhistory-tool can't handle MMS messages, so they have to be skipped
+						if (jsonContent[line]["type"] == "mms")
+							continue;
 
-					if (! isFirst)
-						result += '\t},\n';
-					isFirst = false;
-					result += '\t{\n';
-					result += '\t\t"type": "' + jsonContent[line]["type"] + '",\n';
+						if (! isFirst)
+							result += '\t},\n';
+						isFirst = false;
+						result += '\t{\n';
+						result += '\t\t"type": "' + jsonContent[line]["type"] + '",\n';
 
-					if (jsonContent[line]["sender"]) {
-						result += '\t\t"to": "' + jsonContent[line]["sender"] + '",\n';
-						direction = 'in';
+						if (jsonContent[line]["sender"]) {
+							result += '\t\t"to": "' + jsonContent[line]["sender"] + '",\n';
+							direction = 'in';
+						}
+						if (jsonContent[line]["receiver"]) {
+							result += '\t\t"to": "' + jsonContent[line]["receiver"] + '",\n';
+							direction = 'out';
+						}
+
+						result += '\t\t"events": [\n';
+						result += '\t\t\t{\n';
+
+						result += '\t\t\t\t"direction": "' + direction + '",\n';
+						result += '\t\t\t\t"date": "' + new Date(jsonContent[line]["timestamp"]).toLocaleFormat('%Y-%m-%dT%H:%M:%S') + '",\n';
+						if (jsonContent[line]["read"] == false)
+							result += '\t\t\t\t"unread": true,\n';
+						result += '\t\t\t\t"text": "' + escapeJson(jsonContent[line]["body"]) + '"\n';
+
+						result += '\t\t\t}\n';
+						result += '\t\t]\n';
+					} catch(e) {
+						return "Error transforming the following line:\n\t" + JSON.stringify(jsonContent[line]) +
+							"\n\nEither this wasn't the object store containing SMS data or you have found a bug.\n" +
+							"If you think you got the correct field please report a bug on\nhttps://github.com/laenion/Firefox-OS-Data-Exporter/issues.";
 					}
-					if (jsonContent[line]["receiver"]) {
-						result += '\t\t"to": "' + jsonContent[line]["receiver"] + '",\n';
-						direction = 'out';
-					}
-
-					result += '\t\t"events": [\n';
-					result += '\t\t\t{\n';
-
-					result += '\t\t\t\t"direction": "' + direction + '",\n';
-					result += '\t\t\t\t"date": "' + new Date(jsonContent[line]["timestamp"]).toLocaleFormat('%Y-%m-%dT%H:%M:%S') + '",\n';
-					if (jsonContent[line]["read"] == false)
-						result += '\t\t\t\t"unread": true,\n';
-					result += '\t\t\t\t"text": "' + escapeJson(jsonContent[line]["body"]) + '"\n';
-
-					result += '\t\t\t}\n';
-					result += '\t\t]\n';
 				}
 				result += '\t}\n';
 				result += ']\n';
@@ -206,16 +222,24 @@
 			}
 
 			function makeResult(type, fieldname) {
-				jsonContent = JSON.parse('[' + document.getElementById(fieldname).value.substring(0, document.getElementById(fieldname).value.length - 2) + ']');
+				try {
+					jsonContent = JSON.parse('[' + document.getElementById(fieldname).value.substring(0, document.getElementById(fieldname).value.length - 2) + ']');
+				} catch(e) {
+					document.getElementById("processfield").value = "Error parsing data - this should never happen if you didn't modify the data.\n" +
+						"Please report a bug on https://github.com/laenion/Firefox-OS-Data-Exporter/issues\n" +
+						"and attach the line mentioned in the following error if possible:\n\n" + e;
+					location.href = "#process";
+					return;
+				}
 
 				switch (type) {
 					case "calendar2ics":
-						result = makeICSResult(jsonContent);
+						result = transform2ICS(jsonContent);
 						extension = ".ics";
 						document.getElementById("processfield").mimetype = 'text/calendar';
 						break;
 					case "sms2commhistory":
-						result = makeCommhistoryResult(jsonContent);
+						result = transform2commhistory(jsonContent);
 						extension = ".json";
 						document.getElementById("processfield").mimetype = "application/json";
 						break;
@@ -236,10 +260,10 @@
 			}
 		</script>
 	</head>
-	 
+
 	<body>
 		<h1>Firefox OS data exporter</h1>
-		<div class="menu"><a href="#introduction">Introduction</a> <a href="#database">Show database</a> <a href="#process">Result</a></div>
+		<div class="menu"><a href="#introduction">Introduction</a> <a href="#database">Export database</a> <a href="#process">Result</a></div>
 		<div class="tab" id="process">
 			<h2>Result</h2>
 			<p>
@@ -249,7 +273,7 @@
 			</p>
 		</div>
 		<div class="tab" id="database">
-			<h2>Database</h2>
+			<h2>Export database</h2>
 			Database name: <input type="text" id="db" value="b2g-calendar"/><br />
 			<button onclick="exportDatabase()">Export</button><br />
 			<pre id="progress"></pre>
@@ -257,14 +281,22 @@
 		</div>
 		<div class="tab" id="introduction">
 			<h2>Introduction</h2>
-			<p>This website will create JSON output out of your Firefox OS device's data (or any other IndexedDB databases for that matter). The JSON output can then be used to export your data into any other format. The following conversions are available out of the box:
+			<p>This website will <u>help you back up your personal data of your Firefox OS device</u>. Technically this means: It will create human readable JSON output out of the binary IndexedDB databases.<p>
+			<p>In a second step the JSON output can be used to export your data into any other format. The following converters are available out of the box:
 			<ul>
-				<li>Create standard ICS files from Firefox OS calendar data</li>
-				<li>Create JSON files processable by <i>commhistory-tool</i> (e.g. for the <a href="http://jolla.com">Jolla</a> phone) of Firefox OS SMS data</li>
+				<li><b>Calendar:</b> Create standard ICS files from Firefox OS offline calendar data</li>
+				<li><b>SMS:</b> Create JSON files processable by <i>commhistory-tool</i> (e.g. for the <a href="http://jolla.com">Jolla</a> phone) of Firefox OS SMS data</li>
 			</ul>
-			If you need to export any other data into any other format you can at least get the data out of it, but you will have to write your own converter.</p>
-	
-			<p>Note: All data is processed locally on your PC, no data is sent to my server. The source code is available from <a href="https://github.com/laenion/Firefox-OS-Data-Exporter">https://github.com/laenion/Firefox-OS-Data-Exporter</a>.</p>
+			<p>While this website's intention is to help Firefox OS users, you can of course use it to export any IndexedDB data.</p>
+			<p>If you just want to <b>view</b> IndexedDB databases you don't need this website at all: Firefox has an integrated viewer called <a href="https://developer.mozilla.org/de/docs/Tools/Storage_Inspector">Storage Inspector</a> already, however you cannot export any data with it.</p>
+			<h2>System requirements</h2>
+			<ul>
+				<li><a href="https://www.mozilla.org/firefox/desktop/">Mozilla Firefox</a> (tested with versions 38esr &amp; 45esr)</li>
+				<li><a href="http://digitalimagecorp.de/flatpress/index.php/category/firefox-os/">A backup of the userdata of your Firefox OS phone</a></li>
+			</ul>
+			<h2>Usage</h2>
+			<p>See <a href="http://digitalimagecorp.de/flatpress/index.php/category/firefox-os/">the Firefox OS category in my blog</a> for instructions how to use this website.</p>
+			<p>All data is processed locally on your PC, no data is sent to my server. You may also get the source code from <a href="https://github.com/laenion/Firefox-OS-Data-Exporter">https://github.com/laenion/Firefox-OS-Data-Exporter</a>.</p>
 		</div>
 	</body>
 </html>
