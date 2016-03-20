@@ -42,10 +42,15 @@
 						var textfield = document.createElement('textarea');
 						var p = document.createElement('p');
 						var heading = document.createElement('b');
-						var button = document.createElement('button');
-						button.setAttribute('type', 'button');
-						button.setAttribute('onclick', 'makeResult("calendar2ics", "' + objectStoreName + '");');
-						button.innerHTML = 'Convert Calendar data to ICS file';
+						var button_calendar2ics = document.createElement('button');
+						var button_sms2commhistory = document.createElement('button');
+						button_calendar2ics.setAttribute('type', 'button');
+						button_calendar2ics.setAttribute('onclick', 'makeResult("calendar2ics", "' + objectStoreName + '");');
+						button_calendar2ics.innerHTML = 'Convert Calendar data to ICS file';
+						button_sms2commhistory.setAttribute('type', 'button');
+						button_sms2commhistory.setAttribute('onclick', 'makeResult("sms2commhistory", "' + objectStoreName + '");');
+						button_sms2commhistory.setAttribute('style', 'margin-left:20px;');
+						button_sms2commhistory.innerHTML = 'Convert SMS data to commhistory-tools JSON file';
 						textfield.setAttribute('rows', 10);
 						textfield.setAttribute('style', 'width:100%;');
 						textfield.setAttribute('id', objectStoreName);
@@ -54,7 +59,8 @@
 						p.appendChild(heading);
 						form.appendChild(p);
 						form.appendChild(textfield);
-						form.appendChild(button);
+						form.appendChild(button_calendar2ics);
+						form.appendChild(button_sms2commhistory);
 
 						processObjectStore(event, num - 1);
 					}
@@ -92,11 +98,15 @@
 				return s;
 			}
 
-			function makeResult(type, fieldname) {
-				var extension;
+			function escapeJson(s) {
+				var s = s.replace(/\\/g, "\\\\");
+				s = s.replace(/\n/g, "\\n");
+				s = s.replace(/"/g, "\\\"");
+				return s;
+			}
 
-				var jsonContent = JSON.parse('[' + document.getElementById(fieldname).value.substring(0, document.getElementById(fieldname).value.length - 2) + ']');
-
+			function makeICSResult(jsonContent) {
+				var foundEntries = 0;
 				var result = "BEGIN:VCALENDAR\n";
 				result += "PRODID:-//digitalimagecorp.de//Firefox OS calendar converter//EN\n";
 				result += "VERSION:2.0\n";
@@ -104,6 +114,7 @@
 					// Skip all non-local entries - they have been synced from somewhere and need no backup
 					if (jsonContent[line]["calendarId"] != "local-first")
 						continue;
+					foundEntries++;
 					result += "BEGIN:VEVENT\n";
 					result += "DTSTAMP:" + new Date().toLocaleFormat("%Y%m%dT%H%M%SZ") + "\n";
 					result += "UID:" + jsonContent[line]["remote"]["id"] + "\n";
@@ -116,13 +127,12 @@
 					// Despite it's name the timestamp is *not* UTC, so the offset has to be added / substracted
 					var start = new Date(jsonContent[line]["remote"]["start"]["utc"] - jsonContent[line]["remote"]["start"]["offset"]);
 					var end = new Date(jsonContent[line]["remote"]["end"]["utc"] - jsonContent[line]["remote"]["start"]["offset"]);
-					// All day events can be either saved with the corresponding attribute "isDate"(FFOS 1.1) or just span the whole day (FFOS 1.3)
+					// "All day" events will either be saved with the corresponding attribute "isDate" (FFOS 1.1) or just span the whole day (FFOS 1.3)
 					if (jsonContent[line]["remote"]["start"]["isDate"] || ((start.toLocaleFormat("%H%M%S") == 0) && (end.toLocaleFormat("%H%M%S") == 0))) {
 						result += "DTSTART;VALUE=DATE:" + start.toLocaleFormat("%Y%m%d") + "\n";
 						result += "DTEND;VALUE=DATE:" + end.toLocaleFormat("%Y%m%d") + "\n";
 					} else {
-						//result += "DTSTART:" + start.toLocaleFormat("%Y%m%dT%H%M%S") + "\n";
-						result += "DTSTART:" + ("000" + start.getFullYear()).slice(-4) + ("0" + (start.getMonth() + 1)).slice(-2) + ("0" + start.getDate()).slice(-2) + "T" + ("0" + start.getHours()).slice(-2) + ("0" + start.getMinutes()).slice(-2) + ("0" + start.getSeconds()).slice(-2) + "\n";
+						result += "DTSTART:" + start.toLocaleFormat("%Y%m%dT%H%M%S") + "\n";
 						result += "DTEND:" + end.toLocaleFormat("%Y%m%dT%H%M%S") + "\n";
 					}
 
@@ -141,7 +151,78 @@
 					result += "END:VEVENT\n";
 				}
 				result += "END:VCALENDAR\n";
-				extension = ".ics";
+
+				if (foundEntries)
+					return result;
+				else
+					return "Could not find any entries - probably this wasn't the object store containing the calendar data...";
+			}
+
+			function makeCommhistoryResult(jsonContent) {
+				var foundEntries = 0;
+				var isFirst = true;
+				var result = "[\n";
+
+				for (var line in jsonContent) {
+					var direction = "";
+
+					if (jsonContent[line]["type"] == "mms")
+						continue;
+
+					if (! isFirst)
+						result += '\t},\n';
+					isFirst = false;
+					result += '\t{\n';
+					result += '\t\t"type": "' + jsonContent[line]["type"] + '",\n';
+
+					if (jsonContent[line]["sender"]) {
+						result += '\t\t"to": "' + jsonContent[line]["sender"] + '",\n';
+						direction = 'in';
+					}
+					if (jsonContent[line]["receiver"]) {
+						result += '\t\t"to": "' + jsonContent[line]["receiver"] + '",\n';
+						direction = 'out';
+					}
+
+					result += '\t\t"events": [\n';
+					result += '\t\t\t{\n';
+
+					result += '\t\t\t\t"direction": "' + direction + '",\n';
+					result += '\t\t\t\t"date": "' + new Date(jsonContent[line]["timestamp"]).toLocaleFormat('%Y-%m-%dT%H:%M:%S') + '",\n';
+					if (jsonContent[line]["read"] == false)
+						result += '\t\t\t\t"unread": true,\n';
+					result += '\t\t\t\t"text": "' + escapeJson(jsonContent[line]["body"]) + '"\n';
+
+					result += '\t\t\t}\n';
+					result += '\t\t]\n';
+				}
+				result += '\t}\n';
+				result += ']\n';
+
+				if (! isFirst)
+					return result;
+				else
+					return "Could not find any entries - probably this wasn't the object store containing the SMS data...";
+			}
+
+			function makeResult(type, fieldname) {
+				jsonContent = JSON.parse('[' + document.getElementById(fieldname).value.substring(0, document.getElementById(fieldname).value.length - 2) + ']');
+
+				switch (type) {
+					case "calendar2ics":
+						result = makeICSResult(jsonContent);
+						extension = ".ics";
+						document.getElementById("processfield").mimetype = 'text/calendar';
+						break;
+					case "sms2commhistory":
+						result = makeCommhistoryResult(jsonContent);
+						extension = ".json";
+						document.getElementById("processfield").mimetype = "application/json";
+						break;
+					default:
+						result = "Error: The specified converter was not found.";
+				}
+
 				document.getElementById("processfield").value = result;
 				location.href = "#process";
 
@@ -149,7 +230,7 @@
 			}
 
 			function save() {
-				var blob = new Blob([document.getElementById("processfield").value], {type:'text/calendar'});
+				var blob = new Blob([document.getElementById("processfield").value], {type:document.getElementById("processfield").mimetype});
 				document.getElementById("hiddenSaveLink").href = window.URL.createObjectURL(blob);
 				document.getElementById("hiddenSaveLink").click();
 			}
@@ -158,9 +239,9 @@
 	 
 	<body>
 		<h1>Firefox OS data exporter</h1>
-		<div class="menu"><a href="#introduction">Introduction</a> <a href="#database">Show database</a> <a href="#process">Process data</a></div>
+		<div class="menu"><a href="#introduction">Introduction</a> <a href="#database">Show database</a> <a href="#process">Result</a></div>
 		<div class="tab" id="process">
-			<h2>Process data</h2>
+			<h2>Result</h2>
 			<p>
 				<textarea id="processfield" rows=30 style="width:100%;" ></textarea>
 				<a id="hiddenSaveLink" style="display:none;">Download</a>
