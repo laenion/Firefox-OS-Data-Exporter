@@ -30,7 +30,7 @@
 
 				var objectStoreName = event.target.result.objectStoreNames.item(num);
 				var objectStore = db.transaction(objectStoreName).objectStore(objectStoreName);
-				var output = "";
+				var output = "[\n";
 
 				objectStore.openCursor().onsuccess = function(event2) {
 					var cursor = event2.target.result;
@@ -38,6 +38,8 @@
 						output += JSON.stringify(cursor.value) + ",\n";
 						cursor.continue();
 					} else {
+						output = output.substring(0, output.length - 2);
+						output += "\n]"
 						var form = document.getElementById('objectstores');
 						var textfield = document.createElement('textarea');
 						var p = document.createElement('p');
@@ -223,7 +225,7 @@
 
 			function makeResult(type, fieldname) {
 				try {
-					jsonContent = JSON.parse('[' + document.getElementById(fieldname).value.substring(0, document.getElementById(fieldname).value.length - 2) + ']');
+					jsonContent = JSON.parse(document.getElementById(fieldname).value);
 				} catch(e) {
 					document.getElementById("processfield").value = "Error parsing data - this should never happen if you didn't modify the data.\n" +
 						"Please report a bug on https://github.com/laenion/Firefox-OS-Data-Exporter/issues\n" +
