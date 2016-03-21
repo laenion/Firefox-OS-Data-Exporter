@@ -276,8 +276,10 @@
 		</div>
 		<div class="tab" id="database">
 			<h2>Export database</h2>
-			Database name: <input type="text" id="db" value="b2g-calendar"/><br />
-			<button onclick="exportDatabase()">Export</button><br />
+			<form onsubmit="exportDatabase()" action="javascript:void(0);">
+				Database name: <input type="text" id="db" value="b2g-calendar"/><br />
+				<button onclick="exportDatabase()">Export</button><br />
+			</form>
 			<pre id="progress"></pre>
 			<form id="objectstores"></form>
 		</div>
