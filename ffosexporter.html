@@ -122,7 +122,8 @@
 						numEntries++;
 
 						result += "BEGIN:VEVENT\n";
-						result += "DTSTAMP:" + new Date().toLocaleFormat("%Y%m%dT%H%M%SZ") + "\n";
+						var now = new Date();
+						result += "DTSTAMP:" + ("000" + now.getFullYear()).slice(-4) + ("0" + (now.getMonth() + 1)).slice(-2) + ("0" + now.getDate()).slice(-2) + "T" + ("0" + now.getHours()).slice(-2) + ("0" + now.getMinutes()).slice(-2) + ("0" + now.getSeconds()).slice(-2) + "Z\n";
 						result += "UID:" + jsonContent[line]["remote"]["id"] + "\n";
 						result += "SUMMARY:" + escapeIcs(jsonContent[line]["remote"]["title"]) + "\n";
 						if (jsonContent[line]["remote"]["location"])
@@ -130,16 +131,16 @@
 						if (jsonContent[line]["remote"]["description"])
 							result += "DESCRIPTION:" + escapeIcs(jsonContent[line]["remote"]["description"]) + "\n";
 
-						// Despite it's name the timestamp is *not* UTC, so the offset has to be added / substracted
+						// Despite its name the timestamp is *not* UTC, so the offset has to be added / substracted
 						var start = new Date(jsonContent[line]["remote"]["start"]["utc"] - jsonContent[line]["remote"]["start"]["offset"]);
 						var end = new Date(jsonContent[line]["remote"]["end"]["utc"] - jsonContent[line]["remote"]["start"]["offset"]);
 						// "All day" events will either be saved with the corresponding attribute "isDate" (FFOS 1.1) or just span the whole day (FFOS 1.3)
-						if (jsonContent[line]["remote"]["start"]["isDate"] || ((start.toLocaleFormat("%H%M%S") == 0) && (end.toLocaleFormat("%H%M%S") == 0))) {
-							result += "DTSTART;VALUE=DATE:" + start.toLocaleFormat("%Y%m%d") + "\n";
-							result += "DTEND;VALUE=DATE:" + end.toLocaleFormat("%Y%m%d") + "\n";
+						if (jsonContent[line]["remote"]["start"]["isDate"] || ((start.getHours() + start.getMinutes() + start.getSeconds() + end.getHours() + end.getMinutes() + end.getSeconds()) == 0)) {
+							result += "DTSTART;VALUE=DATE:" + ("000" + start.getFullYear()).slice(-4) + ("0" + (start.getMonth() + 1)).slice(-2) + ("0" + start.getDate()).slice(-2) + "\n";
+							result += "DTEND;VALUE=DATE:" + ("000" + end.getFullYear()).slice(-4) + ("0" + (end.getMonth() + 1)).slice(-2) + ("0" + end.getDate()).slice(-2) + "\n";
 						} else {
-							result += "DTSTART:" + start.toLocaleFormat("%Y%m%dT%H%M%S") + "\n";
-							result += "DTEND:" + end.toLocaleFormat("%Y%m%dT%H%M%S") + "\n";
+							result += "DTSTART:" + ("000" + start.getFullYear()).slice(-4) + ("0" + (start.getMonth() + 1)).slice(-2) + ("0" + start.getDate()).slice(-2) + "T" + ("0" + start.getHours()).slice(-2) + ("0" + start.getMinutes()).slice(-2) + ("0" + start.getSeconds()).slice(-2) + "\n";
+							result += "DTEND:" + ("000" + end.getFullYear()).slice(-4) + ("0" + (end.getMonth() + 1)).slice(-2) + ("0" + end.getDate()).slice(-2) + "T" + ("0" + end.getHours()).slice(-2) + ("0" + end.getMinutes()).slice(-2) + ("0" + end.getSeconds()).slice(-2) + "\n";
 						}
 
 						result += "TRANSP:OPAQUE\n";
@@ -156,9 +157,10 @@
 						}
 						result += "END:VEVENT\n";
 					} catch(e) {
-						return "Error transforming line " + numentries + ":\n\t" + JSON.stringify(jsonContent[line]) +
+						return "Error transforming line " + numEntries + ":\n\t" + JSON.stringify(jsonContent[line]) +
 							"\n\nEither this wasn't the object store containing calendar data or you have found a bug.\n" +
-							"If you think you got the correct field please report a bug on\nhttps://github.com/laenion/Firefox-OS-Data-Exporter/issues.";
+							"If you think you got the correct field please report a bug on\nhttps://github.com/laenion/Firefox-OS-Data-Exporter/issues.\n\n" +
+							"Error message: " + e;
 					}
 				}
 				result += "END:VCALENDAR\n";
@@ -201,7 +203,7 @@
 						result += '\t\t\t{\n';
 
 						result += '\t\t\t\t"direction": "' + direction + '",\n';
-						result += '\t\t\t\t"date": "' + new Date(jsonContent[line]["timestamp"]).toLocaleFormat('%Y-%m-%dT%H:%M:%S') + '",\n';
+						result += '\t\t\t\t"date": "' + new Date(jsonContent[line]["timestamp"]).toISOString() + '",\n';
 						if (jsonContent[line]["read"] == false)
 							result += '\t\t\t\t"unread": true,\n';
 						result += '\t\t\t\t"text": "' + escapeJson(jsonContent[line]["body"]) + '"\n';
