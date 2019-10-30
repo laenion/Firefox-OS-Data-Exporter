@@ -76,7 +76,7 @@
 
 				databaseName = document.getElementById("db").value;
 
-				var request = window.indexedDB.open(databaseName, 99999999);
+				var request = window.indexedDB.open(databaseName);
 
 				request.onerror = function(event) {
 					console.log("error: ");
