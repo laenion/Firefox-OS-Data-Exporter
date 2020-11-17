@@ -22,24 +22,37 @@
 				window.alert("Your browser doesn't support a stable version of IndexedDB.")
 			}
 
-			function processObjectStore(event, num) {
-				if (num < 0) {
-					document.getElementById("progress").textContent = "Done";
+			var processedId = 0;
+			var output = "[\n";
+			var count = 0;
+			var objectStoreNum = -1;
+
+			function processObjectStore(event) {
+				if (objectStoreNum < 0) {
+					document.getElementById("progress").textContent += "Done. ";
 					return "";
 				}
 
-				var objectStoreName = event.target.result.objectStoreNames.item(num);
+				var objectStoreName = event.target.result.objectStoreNames.item(objectStoreNum);
+				document.getElementById("progress").textContent += "Processing " + objectStoreName + "... ";
 				var objectStore = db.transaction(objectStoreName).objectStore(objectStoreName);
-				var output = "[\n";
 
-				objectStore.openCursor().onsuccess = function(event2) {
+				request = objectStore.openCursor(IDBKeyRange.lowerBound(processedId));
+				var cursor;
+				var onsuccesshandler = function(event2) {
 					var cursor = event2.target.result;
 					if (cursor) {
 						output += JSON.stringify(cursor.value) + ",\n";
+						processedId = cursor.value.id;
+						// DEBUGGING: Real live proved that broken entries exist - it's not clear how these entries were created,
+						// but they have to be handled. It turned out that advancing beyond the end will trigger the same
+						// behaviour. This will simulate that every 20th entry is broken.
+						//if (processedId % 20 === 0)
+						//	cursor.advance(200000);
 						cursor.continue();
 					} else {
 						output = output.substring(0, output.length - 2);
-						output += "\n]"
+						output += "\n]";
 						var form = document.getElementById('objectstores');
 						var textfield = document.createElement('textarea');
 						var p = document.createElement('p');
@@ -64,31 +77,50 @@
 						form.appendChild(button_calendar2ics);
 						form.appendChild(button_sms2commhistory);
 
-						processObjectStore(event, num - 1);
+						processedId = 0;
+						output = "[\n";
+						objectStoreNum--;
+						processObjectStore(event);
 					}
 				}
+
+				var onerrorhandler = function(event2) {
+					document.getElementById("progress").textContent += "Error decoding entry " + processedId + ". ";
+					console.log("error (" + event2.target.error.name + "): " + event2.target.error.message);
+					processedId++;
+
+					// On error the database has to be opened again - resume at the last processed ID.
+					processDatabase();
+				}
+
+				request.onsuccess = onsuccesshandler;
+				request.onerror = onerrorhandler;
 			}
 
 			function exportDatabase() {
 				var form = document.getElementById("objectstores");
 				while (form.firstChild)
 					form.removeChild(form.firstChild);
+				processDatabase();
+			}
 
+			function processDatabase() {
 				databaseName = document.getElementById("db").value;
 
 				var request = window.indexedDB.open(databaseName);
 
 				request.onerror = function(event) {
 					console.log("error: ");
-					document.getElementById("output").textContent = "An error occured - see console log for details.";
+					document.getElementById("progress").textContent = "An error occured - see console log for details.";
 				};
 
 				request.onsuccess = function(event) {
 					db = request.result;
 					console.log("success: " + db);
 
-					document.getElementById("progress").textContent = "Processing...";
-					processObjectStore(event, event.target.result.objectStoreNames.length - 1);
+					if (objectStoreNum < 0)
+						objectStoreNum = event.target.result.objectStoreNames.length - 1;
+					processObjectStore(event);
 				};
 			}
 
